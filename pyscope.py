@@ -56,6 +56,11 @@ def setup_pygame():
                 pass
     raise Exception('setup_pygame failed')
 
+def btn_pos(row, col):
+    x = 15 + col * (btn_x + 5)
+    y = scope.size[1] + 5 + row * (btn_y + 5)
+    return (x, y)
+
 class Label (object):
 
     font = None
@@ -167,6 +172,48 @@ class PushButton (object):
     def enable(self, ena=True):
         self.state = self.StateEnabled if ena else self.StateDisabled
 
+class AccelerationSetting (object):
+
+    def __init__(self):
+        self.btns = []
+        self.btns.append(PushButton('Accel +', lambda b: self.accel_inc(), btn_pos(0, 0), btn_size))
+        self.btns.append(PushButton('Accel -', lambda b: self.accel_dec(), btn_pos(2, 0), btn_size))
+        self.lbl = Label('8G', btn_pos(1, 0), btn_size)
+        self.accel = ['2G', '4G', '8G']
+        self.index = len(self.accel) - 1
+        self.btns[0].enable(False)
+
+    def update(self):
+        self.btns[0].enable(self.index < (len(self.accel) - 1))
+        self.btns[1].enable(self.index > 0)
+        self.lbl.set_text(self.accel[self.index])
+
+    def accel_inc(self):
+        self.index = min(self.index + 1, len(self.accel) - 1)
+        self.update()
+
+    def accel_dec(self):
+        self.index = max(self.index - 1, 0)
+        self.update()
+
+    def draw(self, surface):
+        for btn in self.btns:
+            btn.draw(surface)
+        self.lbl.draw(surface)
+
+    def press(self, pos):
+        for btn in self.btns:
+            btn.press(pos)
+
+    def depress(self, pos):
+        for btn in self.btns:
+            btn.depress(pos)
+
+    def enable(self, ena=True):
+        for btn in self.btns:
+            btn.enable(ena)
+        self.lbl.enable(ena)
+
 class Scope (object):
     def __init__(self, xmax=1920, ymax=1200):
         setup_pygame()
@@ -276,15 +323,9 @@ try:
     btn_x = 300
     btn_y = 70
     btn_size = (btn_x, btn_y)
-    def btn_pos(row, col):
-        x = 15 + col * (btn_x + 5)
-        y = scope.size[1] + 5 + row * (btn_y + 5)
-        return (x, y)
     btn_off = (5, 5)
     buttons = []
-    buttons.append(PushButton('Accel +', lambda b: print(b.label), btn_pos(0, 0), btn_size))
-    buttons.append(Label('8G', btn_pos(1, 0), btn_size))
-    buttons.append(PushButton('Accel -', lambda b: print(b.label), btn_pos(2, 0), btn_size))
+    buttons.append(AccelerationSetting())
     #buttons[1].enable(False)
 
 

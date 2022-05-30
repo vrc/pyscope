@@ -56,10 +56,68 @@ def setup_pygame():
                 pass
     raise Exception('setup_pygame failed')
 
+class PushButton (object):
 
-class Scope :
-    screen = None;
-    
+    StateEnabled = 0
+    StateArmed = 1
+    StateDisabled = 2
+
+    font = None
+
+    def __init__(self, label, on_click, pos, size=None):
+        if self.font is None:
+            # can only do this once pygame.font.init() has been called
+            self.__class__.font = pygame.font.SysFont('notomono', 50)
+
+        text = [self.font.render(label, True, (0, 0, 0))]
+        text.append(self.font.render(label, True, (255, 255, 255)))
+        text.append(self.font.render(label, True, (127, 127, 127)))
+
+        if size is None:
+            size = text[0].get_size()
+            size = (size[0] + 4, size[1] + 4)
+
+        self.label = label
+        self.rect = pygame.Rect(pos, size)
+        self.on_click = on_click
+        self.state = self.StateEnabled
+
+        self.btn = [pygame.Surface(size)]
+        self.btn[0].fill((200, 200, 200))
+        dx = (self.btn[0].get_width() - text[0].get_width()) // 2
+        dy = (self.btn[0].get_height() - text[0].get_height()) // 2
+        self.btn.append(self.btn[0].copy())
+        self.btn.append(self.btn[0].copy())
+
+        self.btn[0].blit(text[1], (dx+1, dy+1))
+        self.btn[0].blit(text[0], (dx, dy))
+        pygame.draw.lines(self.btn[0], (50, 50, 50), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
+        pygame.draw.lines(self.btn[0], (255, 255, 255), False, [(size[0]-1, 1), (1, 1), (1, size[1] - 1)], 3)
+
+        self.btn[1].blit(text[1], (dx, dy))
+        self.btn[1].blit(text[0], (dx+1, dy+1))
+        pygame.draw.lines(self.btn[1], (50, 50, 50), False, [(size[0]-1, 1), (1, 1), (1, size[1] - 1)], 3)
+        pygame.draw.lines(self.btn[1], (255, 255, 255), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
+
+        self.btn[2].blit(text[2], (dx, dy))
+
+    def draw(self, surface):
+        surface.blit(self.btn[self.state], self.rect)
+
+    def press(self, pos):
+        if self.state == self.StateEnabled and self.rect.collidepoint(pos):
+            self.state = self.StateArmed
+
+    def depress(self, pos):
+        if self.state == self.StateArmed:
+            self.state = self.StateEnabled
+            if self.on_click and self.rect.collidepoint(pos):
+                self.on_click(self)
+
+    def enable(self, ena=True):
+        self.state = self.StateEnabled if ena else self.StateDisabled
+
+class Scope (object):
     def __init__(self, xmax=1920, ymax=1200):
         setup_pygame()
         print(f"display: {pygame.display.Info()}")
@@ -165,6 +223,20 @@ try:
     status = font.render('pos:', True, (200, 200, 200))
     status_pos = (15, scope.screen_size[1] - 5 - status.get_height())
 
+    btn_x = 300
+    btn_y = 70
+    btn_size = (btn_x, btn_y)
+    def btn_pos(row, col):
+        x = 15 + col * (btn_x + 5)
+        y = scope.size[1] + 5 + row * (btn_y + 5)
+        return (x, y)
+    btn_off = (5, 5)
+    buttons = []
+    buttons.append(PushButton('Accel +', lambda b: print(b.label), btn_pos(0, 0), btn_size))
+    buttons.append(PushButton('Accel -', lambda b: print(b.label), btn_pos(1, 0), btn_size))
+    buttons[0].enable(False)
+
+
     pygame.display.update()
 
     sample_cnt = (scope.xlim[1] - scope.xlim[0])
@@ -172,12 +244,22 @@ try:
 
     update_cnt = 0
     begin = time.perf_counter_ns()
+    draw_buttons = True
     while run.value:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == ord('q')):
                 run.value = False
                 break
-            #if event.type == pygame.MOUSEBUTTONDOWN:
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for btn in buttons:
+                    btn.press(event.pos)
+                draw_buttons = True
+            if event.type == pygame.MOUSEBUTTONUP:
+                for btn in buttons:
+                    btn.depress(event.pos)
+                draw_buttons = True
+
             if event.type == pygame.MOUSEMOTION:
                 s = f"pos: {pygame.mouse.get_pos()}"
                 status = font.render(s, True, (200, 200, 200), (0, 0, 0))
@@ -210,6 +292,11 @@ try:
         scope.screen.blit(fps, fps_pos)
         #scope.screen.fill(0, 0, 0), 
         scope.screen.blit(status, status_pos)
+
+        if draw_buttons:
+            for btn in buttons:
+                btn.draw(scope.screen)
+            draw_buttons = False
 
         pygame.display.update()
         time.sleep(.001)

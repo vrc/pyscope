@@ -56,6 +56,56 @@ def setup_pygame():
                 pass
     raise Exception('setup_pygame failed')
 
+class Label (object):
+
+    font = None
+
+    def __init__(self, label, pos, size=None):
+        if self.font is None:
+            # can only do this once pygame.font.init() has been called
+            self.__class__.font = pygame.font.SysFont('notomono', 50)
+
+        self.ena = True
+        self.size = size
+        self.color = (0, 0, 0)
+        self.set_text(label)
+        self.rect = pygame.Rect(pos, self.size)
+
+    def set_color(self, color):
+        self.color = color
+        self._redraw()
+
+    def set_text(self, label):
+        self.label = label
+        self._redraw()
+
+    def _redraw(self):
+        text = self.font.render(self.label, True, self.color if self.ena else (100, 100, 100))
+
+        if self.size is None:
+            self.size = text.get_size()
+
+        self.lbl = pygame.Surface(self.size)
+
+        self.lbl.fill((200, 200, 200))
+        dx = max(0, (self.lbl.get_width() - text.get_width()) // 2)
+        dy = max(0, (self.lbl.get_height() - text.get_height()) // 2)
+        self.lbl.blit(text, (dx, dy))
+
+    def draw(self, surface):
+        surface.blit(self.lbl, self.rect)
+
+    def press(self, pos):
+        pass
+
+    def depress(self, pos):
+        pass
+
+    def enable(self, ena=True):
+        if self.ena != ena:
+            self.ena = ena
+            self._redraw()
+
 class PushButton (object):
 
     StateEnabled = 0
@@ -233,8 +283,9 @@ try:
     btn_off = (5, 5)
     buttons = []
     buttons.append(PushButton('Accel +', lambda b: print(b.label), btn_pos(0, 0), btn_size))
-    buttons.append(PushButton('Accel -', lambda b: print(b.label), btn_pos(1, 0), btn_size))
-    buttons[0].enable(False)
+    buttons.append(Label('8G', btn_pos(1, 0), btn_size))
+    buttons.append(PushButton('Accel -', lambda b: print(b.label), btn_pos(2, 0), btn_size))
+    #buttons[1].enable(False)
 
 
     pygame.display.update()

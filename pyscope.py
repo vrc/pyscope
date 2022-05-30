@@ -57,7 +57,7 @@ def setup_pygame():
     raise Exception('setup_pygame failed')
 
 def btn_pos(row, col):
-    x = 15 + col * (btn_x + 5)
+    x = 15 + col * (btn_x + 12)
     y = scope.size[1] + 5 + row * (btn_y + 5)
     return (x, y)
 
@@ -172,28 +172,33 @@ class PushButton (object):
     def enable(self, ena=True):
         self.state = self.StateEnabled if ena else self.StateDisabled
 
-class AccelerationSetting (object):
+class Setting (object):
 
-    def __init__(self):
+    def __init__(self, label, current, settings, pos, btn_size):
         self.btns = []
-        self.btns.append(PushButton('Accel +', lambda b: self.accel_inc(), btn_pos(0, 0), btn_size))
-        self.btns.append(PushButton('Accel -', lambda b: self.accel_dec(), btn_pos(2, 0), btn_size))
-        self.lbl = Label('8G', btn_pos(1, 0), btn_size)
-        self.accel = ['2G', '4G', '8G']
-        self.index = len(self.accel) - 1
-        self.btns[0].enable(False)
-
-    def update(self):
-        self.btns[0].enable(self.index < (len(self.accel) - 1))
-        self.btns[1].enable(self.index > 0)
-        self.lbl.set_text(self.accel[self.index])
-
-    def accel_inc(self):
-        self.index = min(self.index + 1, len(self.accel) - 1)
+        self.btns.append(PushButton(f"{label} +", lambda b: self.setting_next(), btn_pos(pos[0]+0, pos[1]), btn_size))
+        self.btns.append(PushButton(f"{label} -", lambda b: self.setting_prev(), btn_pos(pos[0]+2, pos[1]), btn_size))
+        self.lbl = Label(current, btn_pos(pos[0]+1, pos[1]), btn_size)
+        self.settings = settings
+        self.index = self.settings.index(current)
+        self.idx = self.index
         self.update()
 
-    def accel_dec(self):
+    def update(self):
+        self.btns[0].enable(self.index < (len(self.settings) - 1))
+        self.btns[1].enable(self.index > 0)
+        self.lbl.set_text(self.settings[self.index])
+
+    def setting_next(self):
+        self.index = min(self.index + 1, len(self.settings) - 1)
+        self.update()
+
+    def setting_prev(self):
         self.index = max(self.index - 1, 0)
+        self.update()
+
+    def setting_reset(self):
+        self.index = self.idx
         self.update()
 
     def draw(self, surface):
@@ -285,23 +290,21 @@ class Scope (object):
     def rect(self):
         return self.boundbox
 
-    def _draw(self, samples):
-        #scale = (self.ylim[1] - self.ylim[0]) * 0.45
+    def _draw(self, samples, step):
+        count = (self.xlim[1] - self.xlim[0] + step - 1) // step
         scale = (self.ylim[1] - self.ylim[0]) * 0.01
-        p0 = [(self.xlim[0] + i, self.y0 - int(scale * v[0])) for i, v in enumerate(samples)]
-        p1 = [(self.xlim[0] + i, self.y0 - int(scale * v[1])) for i, v in enumerate(samples)]
-        p2 = [(self.xlim[0] + i, self.y0 - int(scale * v[2])) for i, v in enumerate(samples)]
+        p0 = [(self.xlim[0] + i * step, self.y0 - int(scale * v[0])) for i, v in enumerate(samples[-count:])]
+        p1 = [(self.xlim[0] + i * step, self.y0 - int(scale * v[1])) for i, v in enumerate(samples[-count:])]
+        p2 = [(self.xlim[0] + i * step, self.y0 - int(scale * v[2])) for i, v in enumerate(samples[-count:])]
         #p3 = [(self.xlim[0] + i, self.y0) for i, v in enumerate(samples)]
         pygame.draw.lines(self.screen, (200, 200, 0), False, p0)
         pygame.draw.lines(self.screen, (0, 200, 0), False, p1)
         pygame.draw.lines(self.screen, (0, 200, 200), False, p2)
         #pygame.draw.lines(self.screen, (0, 0, 200), False, p3)
 
-    def update(self, samples, bg=None):
-        if bg is None:
-            bg = self.bg
-        self.screen.blit(bg, self.rect())
-        self._draw(samples)
+    def update(self, samples, step):
+        self.screen.blit(self.bg, self.rect())
+        self._draw(samples, step)
 
 scope = Scope(1900, 800)
 
@@ -323,10 +326,12 @@ try:
     btn_x = 300
     btn_y = 70
     btn_size = (btn_x, btn_y)
-    btn_off = (5, 5)
-    buttons = []
-    buttons.append(AccelerationSetting())
-    #buttons[1].enable(False)
+    widgets = []
+    widgets.append(Setting('Zoom', '1', [f"{i}" for i in range(100)], (0, 0), btn_size))
+    widgets.append(Setting('Freq', '1620Hz', ['1Hz', '10Hz', '25Hz', '50Hz', '100Hz', '200Hz', '400Hz', '1344Hz', '1620Hz'], (0, 4), btn_size))
+    widgets.append(Setting('Accel', '8G', ['2G', '4G', '8G'], (0, 5), btn_size))
+    #widgets[1].enable(False)
+    zoom = widgets[0]
 
 
     pygame.display.update()
@@ -339,22 +344,28 @@ try:
     draw_buttons = True
     while run.value:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == ord('q')):
-                run.value = False
-                break
+            if event.type == pygame.KEYDOWN:
+                if event.key == ord('q'):
+                    run.value = False
+                if event.key == ord('0'):
+                    zoom.setting_reset()
+                    draw_buttons = True
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-                for btn in buttons:
-                    btn.press(event.pos)
+                for widget in widgets:
+                    widget.press(event.pos)
                 draw_buttons = True
             if event.type == pygame.MOUSEBUTTONUP:
-                for btn in buttons:
-                    btn.depress(event.pos)
+                for widget in widgets:
+                    widget.depress(event.pos)
                 draw_buttons = True
 
-            if event.type == pygame.MOUSEMOTION:
-                s = f"pos: {pygame.mouse.get_pos()}"
-                status = font.render(s, True, (200, 200, 200), (0, 0, 0))
+            #if event.type == pygame.MOUSEMOTION:
+            #    s = f"pos: {pygame.mouse.get_pos()}"
+            #    status = font.render(s, True, (200, 200, 200), (0, 0, 0))
+
+            if event.type == pygame.QUIT:
+                run.value = False
 
         try:
             while True:
@@ -364,12 +375,7 @@ try:
 
         batch = font.render(f"batch: {len(samples) - sample_cnt}", True, (157, 157, 157))
         samples = samples[-sample_cnt:]
-
-        if True:
-            scope.update(samples)
-        else:
-            scope.setup_bg(scope.screen)
-            scope._draw(samples)
+        scope.update(samples, zoom.index + 1)
 
         scope.screen.blit(title, title_pos)
         if update_cnt == 10:
@@ -382,12 +388,11 @@ try:
 
         scope.screen.blit(batch, (scope.x0, 5))
         scope.screen.blit(fps, fps_pos)
-        #scope.screen.fill(0, 0, 0), 
         scope.screen.blit(status, status_pos)
 
         if draw_buttons:
-            for btn in buttons:
-                btn.draw(scope.screen)
+            for widget in widgets:
+                widget.draw(scope.screen)
             draw_buttons = False
 
         pygame.display.update()

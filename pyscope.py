@@ -9,31 +9,82 @@ import random
 import time
 
 
-def data_source(data, run):
+def data_source(data, ctrl, run):
     try:
         import board
         import adafruit_lsm303_accel
 
+        DATA_RATE = [
+                adafruit_lsm303_accel.Rate.RATE_1_HZ,
+                adafruit_lsm303_accel.Rate.RATE_10_HZ,
+                adafruit_lsm303_accel.Rate.RATE_25_HZ,
+                adafruit_lsm303_accel.Rate.RATE_50_HZ,
+                adafruit_lsm303_accel.Rate.RATE_100_HZ,
+                adafruit_lsm303_accel.Rate.RATE_200_HZ,
+                adafruit_lsm303_accel.Rate.RATE_400_HZ,
+                adafruit_lsm303_accel.Rate.RATE_1344_HZ,
+                adafruit_lsm303_accel.Rate.RATE_1620_HZ,
+                ]
+
+        RANGE = [
+                adafruit_lsm303_accel.Range.RANGE_2G,
+                adafruit_lsm303_accel.Range.RANGE_4G,
+                adafruit_lsm303_accel.Range.RANGE_8G,
+                adafruit_lsm303_accel.Range.RANGE_16G,
+                ]
+
+        MODE = [
+                adafruit_lsm303_accel.Mode.MODE_NORMAL,
+                adafruit_lsm303_accel.Mode.MODE_HIGH_RESOLUTION,
+                adafruit_lsm303_accel.Mode.MODE_LOW_POWER,
+                ]
+
         i2c = board.I2C()
         acc = adafruit_lsm303_accel.LSM303_Accel(i2c)
-        #acc.data_rate = adafruit_lsm303_accel.Rate.RATE_1344_HZ
         acc.data_rate = adafruit_lsm303_accel.Rate.RATE_1620_HZ
         while run.value:
             data.put(acc.acceleration)
-            time.sleep(.001)
+            if ctrl.empty():
+                time.sleep(.001)
+            else:
+                cmd, val = ctrl.get_nowait()
+                if cmd == 'f':
+                    acc.data_rate = DATA_RATE[val]
+                elif cmd == 'a':
+                    acc.range = RANGE[val]
+                elif cmd == 'm':
+                    acc.mode = MODE[val]
+                else:
+                    break
     except:
         x = 0
         dx = 2 * np.pi / 1920
         rng = np.random.default_rng()
+        scale = 5
+        noise = 1
+        period = .001
         while run.value:
             x = x + dx
             if x > np.pi:
                 x = x - 2 * np.pi
-            s0 = 45 * np.sin(x + 0 * np.pi / 3) + (rng.random() - .5) * 5
-            s1 = 45 * np.sin(x + 2 * np.pi / 3) + (rng.random() - .5) * 5
-            s2 = 45 * np.sin(x - 2 * np.pi / 3) + (rng.random() - .5) * 5
+            s0 = 9 * scale * np.sin(x + 0 * np.pi / 3) + (rng.random() - .5) * noise * scale
+            s1 = 9 * scale * np.sin(x + 2 * np.pi / 3) + (rng.random() - .5) * noise * scale
+            s2 = 9 * scale * np.sin(x - 2 * np.pi / 3) + (rng.random() - .5) * noise * scale
             data.put((s0, s1, s2))
-            time.sleep(.001)
+            if ctrl.empty():
+                time.sleep(period)
+            else:
+                cmd, val = ctrl.get_nowait()
+                if cmd == 'f':
+                    period = [.5, .2, .1, .05, .02, .01, .005, .002, .001][val]
+                elif cmd == 'a':
+                    scale = [0.625, 1.25, 2.5, 5][val]
+                elif cmd == 'm':
+                    noise = [1, 2, .5][val]
+                else:
+                    print(f"This sucks {cmd} : {val}")
+                    break
+
 
 def _setup_pygame():
     pygame.display.init()
@@ -174,7 +225,7 @@ class PushButton (object):
 
 class Setting (object):
 
-    def __init__(self, label, current, settings, pos, btn_size):
+    def __init__(self, label, on_update, current, settings, pos, btn_size):
         self.btns = []
         self.btns.append(PushButton(f"{label} +", lambda b: self.setting_next(), btn_pos(pos[0]+0, pos[1]), btn_size))
         self.btns.append(PushButton(f"{label} -", lambda b: self.setting_prev(), btn_pos(pos[0]+2, pos[1]), btn_size))
@@ -182,12 +233,15 @@ class Setting (object):
         self.settings = settings
         self.index = self.settings.index(current)
         self.idx = self.index
-        self.update()
+        self.on_update = on_update
+        self.update(False)
 
-    def update(self):
+    def update(self, notify=True):
         self.btns[0].enable(self.index < (len(self.settings) - 1))
         self.btns[1].enable(self.index > 0)
         self.lbl.set_text(self.settings[self.index])
+        if notify and self.on_update:
+            self.on_update(self)
 
     def setting_next(self):
         self.index = min(self.index + 1, len(self.settings) - 1)
@@ -222,7 +276,6 @@ class Setting (object):
 class Scope (object):
     def __init__(self, xmax=1920, ymax=1200):
         setup_pygame()
-        print(f"display: {pygame.display.Info()}")
         self.screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
         self.size = (min(xmax, self.screen_size[0]), min(ymax, self.screen_size[1]))
         self.screen = pygame.display.set_mode(self.screen_size, pygame.FULLSCREEN)
@@ -230,8 +283,7 @@ class Scope (object):
         self.setup_bg(self.bg)
         pygame.display.update()
         self.boundbox = pygame.Rect(0, 0, self.size[0], self.size[1])
-        print(f"screen: {self.screen_size}, scope: {self.size}")
-        print(f"display: {pygame.display.Info()}")
+        self.step = 1
 
     def setup_bg(self, bg):
         "Renders an empty graticule"
@@ -290,6 +342,9 @@ class Scope (object):
     def rect(self):
         return self.boundbox
 
+    def set_step(self, step):
+        self.step = step
+
     def _draw(self, samples, step):
         count = (self.xlim[1] - self.xlim[0] + step - 1) // step
         scale = (self.ylim[1] - self.ylim[0]) * 0.01
@@ -302,17 +357,18 @@ class Scope (object):
         pygame.draw.lines(self.screen, (0, 200, 200), False, p2)
         #pygame.draw.lines(self.screen, (0, 0, 200), False, p3)
 
-    def update(self, samples, step):
+    def update(self, samples):
         self.screen.blit(self.bg, self.rect())
-        self._draw(samples, step)
+        self._draw(samples, self.step)
 
 scope = Scope(1900, 800)
 
 try:
     run = mp.Value('b', True)
     data = mp.Queue(0)
+    ctrl = mp.Queue(0)
 
-    proc = mp.Process(target=data_source, args=(data, run))
+    proc = mp.Process(target=data_source, args=(data, ctrl, run))
     proc.start()
 
     font = pygame.font.Font(None, 30)
@@ -327,9 +383,10 @@ try:
     btn_y = 70
     btn_size = (btn_x, btn_y)
     widgets = []
-    widgets.append(Setting('Zoom', '1', [f"{i}" for i in range(100)], (0, 0), btn_size))
-    widgets.append(Setting('Freq', '1620Hz', ['1Hz', '10Hz', '25Hz', '50Hz', '100Hz', '200Hz', '400Hz', '1344Hz', '1620Hz'], (0, 4), btn_size))
-    widgets.append(Setting('Accel', '8G', ['2G', '4G', '8G'], (0, 5), btn_size))
+    widgets.append(Setting('Zoom', lambda s: scope.set_step(s.index + 1), '1', [f"{i+1}" for i in range(100)], (0, 0), btn_size))
+    widgets.append(Setting('Mode', lambda s: ctrl.put(('m', s.index)), 'NORMAL', ['NORMAL', 'HIRES', 'LOWPO'], (0, 3), btn_size))
+    widgets.append(Setting('Freq', lambda s: ctrl.put(('f', s.index)), '1620Hz', ['1Hz', '10Hz', '25Hz', '50Hz', '100Hz', '200Hz', '400Hz', '1344Hz', '1620Hz'], (0, 4), btn_size))
+    widgets.append(Setting('Rnge', lambda s: ctrl.put(('a', s.index)), '16G', ['2G', '4G', '8G', '16G'], (0, 5), btn_size))
     #widgets[1].enable(False)
     zoom = widgets[0]
 
@@ -375,7 +432,7 @@ try:
 
         batch = font.render(f"batch: {len(samples) - sample_cnt}", True, (157, 157, 157))
         samples = samples[-sample_cnt:]
-        scope.update(samples, zoom.index + 1)
+        scope.update(samples)
 
         scope.screen.blit(title, title_pos)
         if update_cnt == 10:

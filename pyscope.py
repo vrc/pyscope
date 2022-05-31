@@ -156,7 +156,7 @@ class Label (Text):
         self.lbl.blit(text, (dx, dy))
 
     def draw(self, surface):
-        surface.blit(self.lbl, self.rect)
+        return surface.blit(self.lbl, self.rect)
 
     def press(self, pos):
         pass
@@ -215,7 +215,7 @@ class PushButton (Text):
             pygame.draw.lines(self.btn, (255, 255, 255), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
 
     def draw(self, surface):
-        surface.blit(self.btn, self.rect)
+        return surface.blit(self.btn, self.rect)
 
     def press(self, pos):
         if self.state == self.StateEnabled and self.rect.collidepoint(pos):
@@ -269,6 +269,7 @@ class Setting (object):
         for btn in self.btns:
             btn.draw(surface)
         self.lbl.draw(surface)
+        return self.rect()
 
     def press(self, pos):
         for btn in self.btns:
@@ -446,31 +447,34 @@ try:
         except queue.Empty:
             pass
 
+        upd = []
+
         count = len(samples) - sample_cnt
         batch = font.render(f"batch: {count}", True, (157, 157, 157))
         if count > 0:
             samples = samples[-sample_cnt:]
             scope.update(samples)
             scope.screen.blit(title, title_pos)
+            upd.append(scope.rect())
 
         if update_cnt == 10:
             end = time.perf_counter_ns()
-            fps = font.render(f"fps: {1e10/(end - begin):5.2f}", True, (0, 157, 0))
+            fps = font.render(f"fps: {1e10/(end - begin):5.2f}", True, (250, 250, 0))
             update_cnt = 0
             begin = end
         else:
             update_cnt = update_cnt + 1
 
-        scope.screen.blit(batch, (scope.x0, 0))
-        scope.screen.blit(fps, fps_pos)
-        scope.screen.blit(status, status_pos)
+        upd.append(scope.screen.blit(batch, (scope.x0, 0)))
+        upd.append(scope.screen.blit(fps, fps_pos))
+        upd.append(scope.screen.blit(status, status_pos))
 
         if update_ctrl:
             for widget in widgets:
-                widget.draw(scope.screen)
+                upd.append(widget.draw(scope.screen))
             update_ctrl = False
 
-        pygame.display.update()
+        pygame.display.update(upd)
         time.sleep(.001)
 finally:
     run.value = False

@@ -112,20 +112,18 @@ def btn_pos(row, col):
     y = scope.size[1] + 5 + row * (btn_y + 5)
     return (x, y)
 
-class Label (object):
-
+class Text (object):
     font = None
 
-    def __init__(self, label, pos, size=None):
+    def __init__(self, label):
         if self.font is None:
             # can only do this once pygame.font.init() has been called
-            self.__class__.font = pygame.font.SysFont('notomono', 50)
-
-        self.ena = True
-        self.size = size
+            self.__class__.font = pygame.font.SysFont('notomono', 20)
         self.color = (0, 0, 0)
-        self.set_text(label)
-        self.rect = pygame.Rect(pos, self.size)
+        self.label = label
+
+    def _redraw(self):
+        self.text = self.font.render(self.label, True, self.color)
 
     def set_color(self, color):
         self.color = color
@@ -134,6 +132,15 @@ class Label (object):
     def set_text(self, label):
         self.label = label
         self._redraw()
+
+class Label (Text):
+
+    def __init__(self, label, pos, size=None):
+        super().__init__(label)
+        self.ena = True
+        self.size = size
+        self.set_text(label)
+        self.rect = pygame.Rect(pos, self.size)
 
     def _redraw(self):
         text = self.font.render(self.label, True, self.color if self.ena else (100, 100, 100))
@@ -162,66 +169,69 @@ class Label (object):
             self.ena = ena
             self._redraw()
 
-class PushButton (object):
+class PushButton (Text):
 
     StateEnabled = 0
     StateArmed = 1
     StateDisabled = 2
 
-    font = None
-
     def __init__(self, label, on_click, pos, size=None):
-        if self.font is None:
-            # can only do this once pygame.font.init() has been called
-            self.__class__.font = pygame.font.SysFont('notomono', 50)
+        super().__init__(label)
 
-        text = [self.font.render(label, True, (0, 0, 0))]
-        text.append(self.font.render(label, True, (255, 255, 255)))
-        text.append(self.font.render(label, True, (127, 127, 127)))
-
-        if size is None:
-            size = text[0].get_size()
-            size = (size[0] + 4, size[1] + 4)
-
-        self.label = label
-        self.rect = pygame.Rect(pos, size)
         self.on_click = on_click
         self.state = self.StateEnabled
+        self.size = size
+        self._redraw()
+        self.rect = pygame.Rect(pos, self.size)
 
-        self.btn = [pygame.Surface(size)]
-        self.btn[0].fill((200, 200, 200))
-        dx = (self.btn[0].get_width() - text[0].get_width()) // 2
-        dy = (self.btn[0].get_height() - text[0].get_height()) // 2
-        self.btn.append(self.btn[0].copy())
-        self.btn.append(self.btn[0].copy())
+    def _redraw(self):
+        color= [(0, 0, 0), (255, 255, 255), (100, 100, 100)][self.state]
+        text = self.font.render(self.label, True, color)
 
-        self.btn[0].blit(text[1], (dx+1, dy+1))
-        self.btn[0].blit(text[0], (dx, dy))
-        pygame.draw.lines(self.btn[0], (50, 50, 50), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
-        pygame.draw.lines(self.btn[0], (255, 255, 255), False, [(size[0]-1, 1), (1, 1), (1, size[1] - 1)], 3)
+        if self.size is None:
+            self.size = text.get_size()
+            self.size = (self.size[0] + 4, self.size[1] + 4)
+        size = self.size
 
-        self.btn[1].blit(text[1], (dx, dy))
-        self.btn[1].blit(text[0], (dx+1, dy+1))
-        pygame.draw.lines(self.btn[1], (50, 50, 50), False, [(size[0]-1, 1), (1, 1), (1, size[1] - 1)], 3)
-        pygame.draw.lines(self.btn[1], (255, 255, 255), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
+        self.btn = pygame.Surface(size)
+        self.btn.fill((200, 200, 200))
 
-        self.btn[2].blit(text[2], (dx, dy))
+        dx = (self.btn.get_width() - text.get_width()) // 2
+        dy = (self.btn.get_height() - text.get_height()) // 2
+
+        if self.state != self.StateDisabled:
+            ghost = self.font.render(self.label, True, (255 - color[0], 255 - color[1], 255 - color[2]))
+            self.btn.blit(ghost, (dx+1, dy+1))
+            self.btn.blit(text, (dx-1, dy-1))
+        else:
+            self.btn.blit(text, (dx, dy))
+
+        if self.state == self.StateEnabled:
+            pygame.draw.lines(self.btn, (50, 50, 50), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
+            pygame.draw.lines(self.btn, (255, 255, 255), False, [(size[0]-1, 1), (1, 1), (1, size[1] - 1)], 3)
+
+        if self.state == self.StateArmed:
+            pygame.draw.lines(self.btn, (50, 50, 50), False, [(size[0]-1, 1), (1, 1), (1, size[1] - 1)], 3)
+            pygame.draw.lines(self.btn, (255, 255, 255), False, [(size[0]-1, 1), (size[0]-1, size[1]-1), (1, size[1] - 1)], 3)
 
     def draw(self, surface):
-        surface.blit(self.btn[self.state], self.rect)
+        surface.blit(self.btn, self.rect)
 
     def press(self, pos):
         if self.state == self.StateEnabled and self.rect.collidepoint(pos):
             self.state = self.StateArmed
+            self._redraw()
 
     def depress(self, pos):
         if self.state == self.StateArmed:
             self.state = self.StateEnabled
+            self._redraw()
             if self.on_click and self.rect.collidepoint(pos):
                 self.on_click(self)
 
     def enable(self, ena=True):
         self.state = self.StateEnabled if ena else self.StateDisabled
+        self._redraw()
 
 class Setting (object):
 
@@ -273,8 +283,11 @@ class Setting (object):
             btn.enable(ena)
         self.lbl.enable(ena)
 
+    def rect(self):
+        return self.btns[0].rect.union(self.btns[1].rect)
+
 class Scope (object):
-    def __init__(self, xmax=1920, ymax=1200):
+    def __init__(self, xmax=1920, ymax=1080):
         setup_pygame()
         self.screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
         self.size = (min(xmax, self.screen_size[0]), min(ymax, self.screen_size[1]))
@@ -287,8 +300,8 @@ class Scope (object):
 
     def setup_bg(self, bg):
         "Renders an empty graticule"
-        xmin = 10
-        xmax = self.size[0] - 10
+        xmin = 5
+        xmax = self.size[0] - 5
         xsize = xmax - xmin
         x0 = self.size[0] // 2
         xline = xsize // 10
@@ -299,7 +312,7 @@ class Scope (object):
         xmax = x0 + xsize // 2
 
         ymin = 30
-        ymax = self.size[1] - 30
+        ymax = self.size[1]
         ysize = ymax - ymin
         y0 = self.size[1] // 2
         yline = ysize // 8
@@ -308,6 +321,11 @@ class Scope (object):
         ysize = yline * 8
         ymin = y0 - ysize // 2
         ymax = y0 + ysize // 2
+
+        self.xlim = (xmin, xmax)
+        self.ylim = (ymin, ymax)
+        self.x0 = x0
+        self.y0 = y0
 
         bg.fill((0, 0, 0))        
 
@@ -334,11 +352,6 @@ class Scope (object):
             x = xmin + i * xtick
             pygame.draw.line(bg, subDividerColor, (x, y0 - tlen - 1), (x, y0 + tlen))
 
-        self.xlim = (xmin, xmax)
-        self.ylim = (ymin, ymax)
-        self.x0 = x0
-        self.y0 = y0
-
     def rect(self):
         return self.boundbox
 
@@ -361,7 +374,7 @@ class Scope (object):
         self.screen.blit(self.bg, self.rect())
         self._draw(samples, self.step)
 
-scope = Scope(1900, 800)
+scope = Scope(1024, 470)
 
 try:
     run = mp.Value('b', True)
@@ -373,14 +386,15 @@ try:
 
     font = pygame.font.Font(None, 30)
     title = font.render('Bibi rocks!', True, (255, 255, 255))
-    title_pos = (15, 5)
+    title_pos = (15, 0)
     fps = font.render('fps:  0.00', True, (100, 100, 100))
-    fps_pos = (scope.size[0] - fps.get_width() - 15, 5)
+    fps_pos = (scope.size[0] - fps.get_width() - 15, 0)
     status = font.render('pos:', True, (200, 200, 200))
-    status_pos = (15, scope.screen_size[1] - 5 - status.get_height())
+    #status_pos = (15, scope.screen_size[1] - 1 - status.get_height())
+    status_pos = (15, 600 - 1 - status.get_height())
 
-    btn_x = 300
-    btn_y = 70
+    btn_x = 155
+    btn_y = 30
     btn_size = (btn_x, btn_y)
     widgets = []
     widgets.append(Setting('Zoom', lambda s: scope.set_step(s.index + 1), '1', [f"{i+1}" for i in range(100)], (0, 0), btn_size))
@@ -398,7 +412,7 @@ try:
 
     update_cnt = 0
     begin = time.perf_counter_ns()
-    draw_buttons = True
+    update_ctrl = True
     while run.value:
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
@@ -406,20 +420,22 @@ try:
                     run.value = False
                 if event.key == ord('0'):
                     zoom.setting_reset()
-                    draw_buttons = True
+                    update_ctrl = True
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 for widget in widgets:
                     widget.press(event.pos)
-                draw_buttons = True
+                update_ctrl = True
             if event.type == pygame.MOUSEBUTTONUP:
                 for widget in widgets:
                     widget.depress(event.pos)
-                draw_buttons = True
+                update_ctrl = True
 
-            #if event.type == pygame.MOUSEMOTION:
-            #    s = f"pos: {pygame.mouse.get_pos()}"
-            #    status = font.render(s, True, (200, 200, 200), (0, 0, 0))
+            if event.type == pygame.MOUSEMOTION:
+                r0 = widgets[0].rect()
+                r1 = widgets[-1].rect()
+                s = f"pos: {widgets[0].rect().topleft} - {widgets[-1].rect().bottomright} + {status.get_height()}"
+                status = font.render(s, True, (200, 200, 200), (0, 0, 0))
 
             if event.type == pygame.QUIT:
                 run.value = False
@@ -430,11 +446,13 @@ try:
         except queue.Empty:
             pass
 
-        batch = font.render(f"batch: {len(samples) - sample_cnt}", True, (157, 157, 157))
-        samples = samples[-sample_cnt:]
-        scope.update(samples)
+        count = len(samples) - sample_cnt
+        batch = font.render(f"batch: {count}", True, (157, 157, 157))
+        if count > 0:
+            samples = samples[-sample_cnt:]
+            scope.update(samples)
+            scope.screen.blit(title, title_pos)
 
-        scope.screen.blit(title, title_pos)
         if update_cnt == 10:
             end = time.perf_counter_ns()
             fps = font.render(f"fps: {1e10/(end - begin):5.2f}", True, (0, 157, 0))
@@ -443,14 +461,14 @@ try:
         else:
             update_cnt = update_cnt + 1
 
-        scope.screen.blit(batch, (scope.x0, 5))
+        scope.screen.blit(batch, (scope.x0, 0))
         scope.screen.blit(fps, fps_pos)
         scope.screen.blit(status, status_pos)
 
-        if draw_buttons:
+        if update_ctrl:
             for widget in widgets:
                 widget.draw(scope.screen)
-            draw_buttons = False
+            update_ctrl = False
 
         pygame.display.update()
         time.sleep(.001)

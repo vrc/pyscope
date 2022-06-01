@@ -90,7 +90,9 @@ def _setup_pygame():
     pygame.display.init()
     pygame.font.init()
     pygame.init()
-    return None
+
+    screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
+    return (pygame.display.set_mode(screen_size, pygame.FULLSCREEN), screen_size)
 
 def setup_pygame():
     disp_no = os.getenv('DISPLAY')
@@ -288,11 +290,9 @@ class Setting (object):
         return self.btns[0].rect.union(self.btns[1].rect)
 
 class Scope (object):
-    def __init__(self, xmax=1920, ymax=1080):
-        setup_pygame()
-        self.screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
-        self.size = (min(xmax, self.screen_size[0]), min(ymax, self.screen_size[1]))
-        self.screen = pygame.display.set_mode(self.screen_size, pygame.FULLSCREEN)
+
+    def __init__(self, xmax, ymax):
+        self.size = (xmax, ymax)
         self.bg = pygame.Surface(self.size)
         self.setup_bg(self.bg)
         pygame.display.update()
@@ -361,23 +361,22 @@ class Scope (object):
     def set_step(self, step):
         self.step = step
 
-    def _draw(self, samples, step):
-        count = (self.xlim[1] - self.xlim[0] + step - 1) // step
+    def draw(self, surface, samples):
+        surface.blit(self.bg, self.rect())
+        count = (self.xlim[1] - self.xlim[0] + self.step - 1) // self.step
         scale = (self.ylim[1] - self.ylim[0]) * 0.01
-        p0 = [(self.xlim[0] + i * step, self.y0 - int(scale * v[0])) for i, v in enumerate(samples[-count:])]
-        p1 = [(self.xlim[0] + i * step, self.y0 - int(scale * v[1])) for i, v in enumerate(samples[-count:])]
-        p2 = [(self.xlim[0] + i * step, self.y0 - int(scale * v[2])) for i, v in enumerate(samples[-count:])]
+        p0 = [(self.xlim[0] + i * self.step, self.y0 - int(scale * v[0])) for i, v in enumerate(samples[-count:])]
+        p1 = [(self.xlim[0] + i * self.step, self.y0 - int(scale * v[1])) for i, v in enumerate(samples[-count:])]
+        p2 = [(self.xlim[0] + i * self.step, self.y0 - int(scale * v[2])) for i, v in enumerate(samples[-count:])]
         #p3 = [(self.xlim[0] + i, self.y0) for i, v in enumerate(samples)]
-        pygame.draw.lines(self.screen, (200, 200, 0), False, p0)
-        pygame.draw.lines(self.screen, (0, 200, 0), False, p1)
-        pygame.draw.lines(self.screen, (0, 200, 200), False, p2)
-        #pygame.draw.lines(self.screen, (0, 0, 200), False, p3)
+        pygame.draw.lines(surface, (200, 200, 0), False, p0)
+        pygame.draw.lines(surface, (0, 200, 0), False, p1)
+        pygame.draw.lines(surface, (0, 200, 200), False, p2)
+        #pygame.draw.lines(surface, (0, 0, 200), False, p3)
+        return self.rect()
 
-    def update(self, samples):
-        self.screen.blit(self.bg, self.rect())
-        self._draw(samples, self.step)
-
-scope = Scope(1024, 470)
+screen, screen_size = setup_pygame()
+scope = Scope(min(1024, screen_size[0]), min(470, screen_size[1]))
 
 try:
     run = mp.Value('b', True)
@@ -387,13 +386,14 @@ try:
     proc = mp.Process(target=data_source, args=(data, ctrl, run))
     proc.start()
 
+
     font = pygame.font.Font(None, 30)
     title = font.render('Bibi rocks!', True, (255, 255, 255))
     title_pos = (15, 0)
     fps = font.render('fps:  0.00', True, (100, 100, 100))
     fps_pos = (scope.size[0] - fps.get_width() - 15, 0)
     status = font.render('pos:', True, (200, 200, 200))
-    #status_pos = (15, scope.screen_size[1] - 1 - status.get_height())
+    #status_pos = (15, screen_size[1] - 1 - status.get_height())
     status_pos = (15, 600 - 1 - status.get_height())
 
     btn_x = 155
@@ -429,16 +429,11 @@ try:
                 for widget in widgets:
                     widget.press(event.pos)
                 update_ctrl = True
+
             if event.type == pygame.MOUSEBUTTONUP:
                 for widget in widgets:
                     widget.depress(event.pos)
                 update_ctrl = True
-
-            if event.type == pygame.MOUSEMOTION:
-                r0 = widgets[0].rect()
-                r1 = widgets[-1].rect()
-                s = f"pos: {widgets[0].rect().topleft} - {widgets[-1].rect().bottomright} + {status.get_height()}"
-                status = font.render(s, True, (200, 200, 200), (0, 0, 0))
 
             if event.type == pygame.QUIT:
                 run.value = False
@@ -455,9 +450,8 @@ try:
         batch = font.render(f"batch: {count}", True, (157, 157, 157))
         if count > 0:
             samples = samples[-sample_cnt:]
-            scope.update(samples)
-            scope.screen.blit(title, title_pos)
-            upd.append(scope.rect())
+            upd.append(scope.draw(screen, samples))
+            screen.blit(title, title_pos)
 
         if update_cnt == 10:
             end = time.perf_counter_ns()
@@ -467,13 +461,13 @@ try:
         else:
             update_cnt = update_cnt + 1
 
-        upd.append(scope.screen.blit(batch, (scope.x0, 0)))
-        upd.append(scope.screen.blit(fps, fps_pos))
-        upd.append(scope.screen.blit(status, status_pos))
+        upd.append(screen.blit(batch, (scope.x0, 0)))
+        upd.append(screen.blit(fps, fps_pos))
+        upd.append(screen.blit(status, status_pos))
 
         if update_ctrl:
             for widget in widgets:
-                upd.append(widget.draw(scope.screen))
+                upd.append(widget.draw(screen))
             update_ctrl = False
 
         pygame.display.update(upd)
@@ -485,7 +479,7 @@ finally:
 
 if False:
     print('scope:')
-    print(f"   screen_size : {scope.screen_size}")
+    print(f"   screen_size : {screen_size}")
     print(f"          size : {scope.size}")
     print(f"      boundbox : {scope.boundbox}")
     print(f"            x0 : {scope.x0}")

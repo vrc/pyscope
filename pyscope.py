@@ -300,26 +300,28 @@ class Scope (object):
         self.step = 1
 
     def setup_bg(self, bg):
-        "Renders an empty graticule"
+        xline_count = 10
+        yline_count = 8
+
         xmin = 5
         xmax = self.size[0] - 5
         xsize = xmax - xmin
-        x0 = self.size[0] // 2
-        xline = xsize // 10
+        x0 = xmin + xsize // 2
+        xline = xsize // xline_count
         xtick = xline // 5
         xline = xtick * 5
-        xsize = xline * 10
+        xsize = xline * xline_count
         xmin = x0 - xsize // 2
         xmax = x0 + xsize // 2
 
-        ymin = 30
+        ymin = 20
         ymax = self.size[1]
         ysize = ymax - ymin
-        y0 = self.size[1] // 2
-        yline = ysize // 8
+        y0 = ymin + ysize // 2
+        yline = ysize // yline_count
         ytick = yline // 5
         yline = ytick * 5
-        ysize = yline * 8
+        ysize = yline * yline_count
         ymin = y0 - ysize // 2
         ymax = y0 + ysize // 2
 
@@ -337,19 +339,19 @@ class Scope (object):
         pygame.draw.rect(bg, borderColor, (xmin - 2, ymin - 2, xsize + 4, ysize + 4), 2)
 
         # draw the grid
-        for i in range(0, 7):
-            y = ymin + (i + 1) * yline
+        for i in range(1, yline_count):
+            y = ymin + i * yline
             pygame.draw.line(bg, lineColor, (xmin, y), (xmax, y))
-        for i in range(0, 9):
-            x = xmin + (i + 1) * xline
+        for i in range(1, xline_count):
+            x = xmin + i * xline
             pygame.draw.line(bg, lineColor, (x, ymin), (x, ymax))
 
         # draw the ticks
         tlen = 4
-        for i in range(1, 40):
+        for i in range(1, yline_count * 5):
             y = ymin + i * ytick
             pygame.draw.line(bg, subDividerColor, (x0 - tlen - 1, y), (x0 + tlen, y))
-        for i in range(1, 50):
+        for i in range(1, xline_count * 5):
             x = xmin + i * xtick
             pygame.draw.line(bg, subDividerColor, (x, y0 - tlen - 1), (x, y0 + tlen))
 
@@ -480,3 +482,13 @@ finally:
     run.value = False
     pygame.quit()
     proc.join()
+
+if False:
+    print('scope:')
+    print(f"   screen_size : {scope.screen_size}")
+    print(f"          size : {scope.size}")
+    print(f"      boundbox : {scope.boundbox}")
+    print(f"            x0 : {scope.x0}")
+    print(f"          xlim : {scope.xlim}")
+    print(f"            y0 : {scope.y0}")
+    print(f"          ylim : {scope.ylim}")

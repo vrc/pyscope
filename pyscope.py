@@ -87,7 +87,6 @@ def data_source(data, ctrl, run):
                     print(f"This sucks {cmd} : {val}")
                     break
 
-
 def _setup_pygame():
     pygame.display.init()
     pygame.font.init()
@@ -114,6 +113,22 @@ def setup_pygame():
 
 screen, screen_size = setup_pygame()
 scope = graph.Scope(min(1024, screen_size[0]), min(470, screen_size[1]))
+
+mouse_position = lambda event: event.pos
+mouse_device = None
+try:
+    import evdev
+
+    for dev in [evdev.InputDevice(nam) for nam in evdev.list_devices()]:
+        if 'ByQDtech' in dev.name:
+            # that's what you get from buying a cheap display
+            pygame.mouse.set_visible(False)
+            mouse_position = lambda e: (dev.absinfo(0).value, dev.absinfo(1).value)
+            mouse_device = dev
+            break
+        dev.close()
+except:
+    pass
 
 try:
     run = mp.Value('b', True)
@@ -164,12 +179,12 @@ try:
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 for widget in widgets:
-                    widget.press(event.pos)
+                    widget.press(mouse_position(event))
                 update_ctrl = True
 
             if event.type == pygame.MOUSEBUTTONUP:
                 for widget in widgets:
-                    widget.depress(event.pos)
+                    widget.depress(mouse_position(event))
                 update_ctrl = True
 
             if event.type == pygame.QUIT:
@@ -210,6 +225,8 @@ try:
         pygame.display.update(upd)
         time.sleep(.001)
 finally:
+    if mouse_device:
+        mouse_device.close()
     run.value = False
     pygame.quit()
     proc.join()

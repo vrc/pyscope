@@ -87,19 +87,21 @@ def data_source(data, ctrl, run):
                     print(f"This sucks {cmd} : {val}")
                     break
 
-def _setup_pygame():
+def _setup_pygame(size=None):
     pygame.display.init()
     pygame.font.init()
     pygame.init()
 
-    screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
-    return (pygame.display.set_mode(screen_size, pygame.FULLSCREEN), screen_size)
+    if size is None:
+        screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
+        return (pygame.display.set_mode(screen_size, pygame.FULLSCREEN), screen_size)
+    return (pygame.display.set_mode(size), size)
 
-def setup_pygame():
+def setup_pygame(xSize):
     disp_no = os.getenv('DISPLAY')
     if disp_no and not os.getenv('SSH_CONNECTION'):
         print('Using X11 driver')
-        return _setup_pygame()
+        return _setup_pygame(xSize)
     else:
         for fp in ['fbcon', 'directfb', 'svgalib']:
             os.putenv('SDL_VIDEODRIVER', fp)
@@ -111,7 +113,7 @@ def setup_pygame():
     raise Exception('setup_pygame failed')
 
 
-screen, screen_size = setup_pygame()
+screen, screen_size = setup_pygame((1024, 600))
 scope = graph.Scope(min(1024, screen_size[0]), min(470, screen_size[1]))
 
 mouse_position = lambda event: event.pos
@@ -154,7 +156,7 @@ try:
     btn_offs = scope.rect().bottom
     widgets = []
     widgets.append(widget.Setting('Zoom', lambda s: scope.set_step(s.index + 1), '1', [f"{i+1}" for i in range(100)], (0, 0), btn_offs, btn_size))
-    widgets.append(widget.Setting('Mode', lambda s: ctrl.put(('m', s.index)), 'NORMAL', ['NORMAL', 'HIRES', 'LOWPO'], (0, 3), btn_offs, btn_size))
+    widgets.append(widget.Combobox('NORMAL', ['NORMAL', 'HIRES', 'LOWPO'], lambda s: ctrl.put(('m', s.index)), widget.btn_pos(btn_offs, 0, 3, btn_size), btn_size))
     widgets.append(widget.Setting('Freq', lambda s: ctrl.put(('f', s.index)), '1620Hz', ['1Hz', '10Hz', '25Hz', '50Hz', '100Hz', '200Hz', '400Hz', '1344Hz', '1620Hz'], (0, 4), btn_offs, btn_size))
     widgets.append(widget.Setting('Rnge', lambda s: ctrl.put(('a', s.index)), '16G', ['2G', '4G', '8G', '16G'], (0, 5), btn_offs, btn_size))
     #widgets[1].enable(False)
@@ -176,16 +178,22 @@ try:
                 if event.key == ord('0'):
                     zoom.setting_reset()
                     update_ctrl = True
+                continue
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 for widget in widgets:
-                    widget.press(mouse_position(event))
-                update_ctrl = True
+                    update_ctrl |= widget.press(mouse_position(event))
+                continue
 
             if event.type == pygame.MOUSEBUTTONUP:
                 for widget in widgets:
-                    widget.depress(mouse_position(event))
-                update_ctrl = True
+                    update_ctrl |= widget.depress(mouse_position(event))
+                continue
+
+            if event.type == pygame.MOUSEMOTION:
+                for widget in widgets:
+                    update_ctrl |= widget.track(mouse_position(event))
+                continue
 
             if event.type == pygame.QUIT:
                 run.value = False
@@ -197,6 +205,7 @@ try:
             pass
 
         upd = []
+        screen.fill((0, 0, 0))
 
         count = len(samples) - sample_cnt
         batch = font.render(f"batch: {count}", True, (157, 157, 157))
@@ -217,7 +226,7 @@ try:
         upd.append(screen.blit(fps, fps_pos))
         upd.append(screen.blit(status, status_pos))
 
-        if update_ctrl:
+        if True or update_ctrl:
             for widget in widgets:
                 upd.append(widget.draw(screen))
             update_ctrl = False

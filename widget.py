@@ -23,6 +23,7 @@ class Text (object):
         self._redraw()
 
     def set_text(self, label):
+        print(f"set_text({label})")
         self.label = label
         self._redraw()
 
@@ -52,10 +53,13 @@ class Label (Text):
         return surface.blit(self.lbl, self.rect)
 
     def press(self, pos):
-        pass
+        return False
 
     def depress(self, pos):
-        pass
+        return False
+
+    def track(self, pos):
+        return False
 
     def enable(self, ena=True):
         if self.ena != ena:
@@ -114,6 +118,8 @@ class PushButton (Text):
         if self.state == self.StateEnabled and self.rect.collidepoint(pos):
             self.state = self.StateArmed
             self._redraw()
+            return True
+        return False
 
     def depress(self, pos):
         if self.state == self.StateArmed:
@@ -121,10 +127,97 @@ class PushButton (Text):
             self._redraw()
             if self.on_click and self.rect.collidepoint(pos):
                 self.on_click(self)
+            return True
+        return False
+
+    def track(self, pos):
+        return False
 
     def enable(self, ena=True):
         self.state = self.StateEnabled if ena else self.StateDisabled
         self._redraw()
+
+class Combobox (Label):
+    StateDefault = 0
+    StateArmed = 1
+    StateArmedPost = 2
+
+    def __init__(self, current, values, on_update, pos, size):
+        self.index = values.index(current)
+        self.values = values
+        self.armed_state = self.StateDefault
+        self.on_update = on_update
+        super().__init__(f">{current}<", pos, size)
+        self.armed_rect = pygame.Rect(self.rect.topleft,  (self.rect.width, self.font.get_linesize() * len(values)))
+
+    def is_armed(self):
+        return self.ena and self.armed_state == self.StateArmed
+
+    def _redraw_armed(self):
+        self.sel = pygame.Surface(self.armed_rect.size)
+        self.sel.fill((200, 200, 200))
+
+        h = self.font.get_linesize()
+        w = self.armed_rect.width
+
+        for i, v in enumerate(self.values):
+            rect = pygame.Rect((0, i * h), (w, h))
+            if i == self.armed_index:
+                print(rect)
+                self.sel.fill((100, 100, 100), rect)
+                text = self.font.render(f">{v}<", True, (255, 255, 255))
+            else:
+                text = self.font.render(v, True, (0, 0, 0))
+            dx = max(0, (w - text.get_width()) // 2)
+            dy = max(0, (h - text.get_height()) // 2)
+            self.sel.blit(text, (dx, dy + i * h))
+
+    def draw(self, surface):
+        if self.is_armed():
+            return surface.blit(self.sel, self.armed_rect)
+        surface.blit(self.lbl, self.rect)
+        if self.armed_state == self.StateArmedPost:
+            print(f"Update armed rect {self.armed_rect}")
+            self.armed_state = self.StateDefault
+            return self.armed_rect
+        return self.rect
+
+    def armed_cancel(self):
+        if self.armed_state == self.StateArmed:
+            self.armed_state = self.StateArmedPost
+            self.set_text(f">{self.values[self.index]}<")
+
+    def press(self, pos):
+        if self.ena and self.armed_state == self.StateDefault and self.rect.collidepoint(pos):
+            self.armed_state = self.StateArmed
+            self.armed_index = self.index
+            print(f"armed: {self.armed_index} {self.ena} {self.is_armed()}")
+            self._redraw_armed()
+            return True
+        print(f"not armed: {self.ena}, {self.armed_state}, {self.rect.collidepoint(pos)}")
+        return False
+
+    def depress(self, pos):
+        if self.is_armed():
+            if self.armed_rect.collidepoint(pos):
+                print(f"index : {self.index} -> {self.armed_index}")
+                self.index = self.armed_index
+                if self.on_update:
+                    self.on_update(self)
+            self.armed_cancel()
+            return True
+        return False
+
+    def track(self, pos):
+        if self.is_armed():
+            if self.armed_rect.collidepoint(pos):
+                self.armed_index = min(len(self.values) - 1, (pos[1] - self.armed_rect.top) // self.font.get_linesize())
+                print(f"armed_index : {self.armed_index}")
+                self._redraw_armed()
+            else:
+                self.armed_cancel()
+            return True
+        return False
 
 class Setting (object):
 
@@ -165,12 +258,22 @@ class Setting (object):
         return self.rect()
 
     def press(self, pos):
+        u = False
         for btn in self.btns:
-            btn.press(pos)
+            u |= btn.press(pos)
+        return u
 
     def depress(self, pos):
+        u = False
         for btn in self.btns:
-            btn.depress(pos)
+            u |= btn.depress(pos)
+        return u
+
+    def track(self, pos):
+        u = False
+        for btn in self.btns:
+            u |= btn.track(pos)
+        return u
 
     def enable(self, ena=True):
         for btn in self.btns:

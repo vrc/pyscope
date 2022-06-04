@@ -94,8 +94,8 @@ def _setup_pygame(size=None):
 
     if size is None:
         screen_size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
-        return (pygame.display.set_mode(screen_size, pygame.FULLSCREEN), screen_size)
-    return (pygame.display.set_mode(size), size)
+        return (pygame.display.set_mode(screen_size, pygame.FULLSCREEN | pygame.DOUBLEBUF), screen_size)
+    return (pygame.display.set_mode(size, pygame.DOUBLEBUF), size)
 
 def setup_pygame(xSize):
     disp_no = os.getenv('DISPLAY')
@@ -169,30 +169,32 @@ try:
 
     update_cnt = 0
     begin = time.perf_counter_ns()
-    update_ctrl = True
     while run.value:
+        focus_widget = None
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
                 if event.key == ord('q'):
                     run.value = False
                 if event.key == ord('0'):
                     zoom.setting_reset()
-                    update_ctrl = True
                 continue
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 for widget in widgets:
-                    update_ctrl |= widget.press(mouse_position(event))
+                    if widget.press(mouse_position(event)):
+                        focus_widget = widget
                 continue
 
             if event.type == pygame.MOUSEBUTTONUP:
                 for widget in widgets:
-                    update_ctrl |= widget.depress(mouse_position(event))
+                    if widget.depress(mouse_position(event)):
+                        focus_widget = widget
                 continue
 
             if event.type == pygame.MOUSEMOTION:
                 for widget in widgets:
-                    update_ctrl |= widget.track(mouse_position(event))
+                    if widget.track(mouse_position(event)):
+                        focus_widget = widget
                 continue
 
             if event.type == pygame.QUIT:
@@ -204,14 +206,13 @@ try:
         except queue.Empty:
             pass
 
-        upd = []
         screen.fill((0, 0, 0))
 
         count = len(samples) - sample_cnt
         batch = font.render(f"batch: {count}", True, (157, 157, 157))
         if count > 0:
             samples = samples[-sample_cnt:]
-            upd.append(scope.draw(screen, samples))
+            scope.draw(screen, samples)
             screen.blit(title, title_pos)
 
         if update_cnt == 10:
@@ -222,16 +223,17 @@ try:
         else:
             update_cnt = update_cnt + 1
 
-        upd.append(screen.blit(batch, (scope.x0, 0)))
-        upd.append(screen.blit(fps, fps_pos))
-        upd.append(screen.blit(status, status_pos))
+        screen.blit(batch, (scope.x0, 0))
+        screen.blit(fps, fps_pos)
+        screen.blit(status, status_pos)
 
-        if True or update_ctrl:
-            for widget in widgets:
-                upd.append(widget.draw(screen))
-            update_ctrl = False
+        for widget in widgets:
+            if widget != focus_widget:
+                widget.draw(screen)
+        if focus_widget:
+            focus_widget.draw(screen)
 
-        pygame.display.update(upd)
+        pygame.display.flip()
         time.sleep(.001)
 finally:
     if mouse_device:

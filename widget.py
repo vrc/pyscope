@@ -23,7 +23,6 @@ class Text (object):
         self._redraw()
 
     def set_text(self, label):
-        print(f"set_text({label})")
         self.label = label
         self._redraw()
 
@@ -163,7 +162,6 @@ class Combobox (Label):
         for i, v in enumerate(self.values):
             rect = pygame.Rect((0, i * h), (w, h))
             if i == self.armed_index:
-                print(rect)
                 self.sel.fill((100, 100, 100), rect)
                 text = self.font.render(f">{v}<", True, (255, 255, 255))
             else:
@@ -177,7 +175,6 @@ class Combobox (Label):
             return surface.blit(self.sel, self.armed_rect)
         surface.blit(self.lbl, self.rect)
         if self.armed_state == self.StateArmedPost:
-            print(f"Update armed rect {self.armed_rect}")
             self.armed_state = self.StateDefault
             return self.armed_rect
         return self.rect
@@ -191,16 +188,13 @@ class Combobox (Label):
         if self.ena and self.armed_state == self.StateDefault and self.rect.collidepoint(pos):
             self.armed_state = self.StateArmed
             self.armed_index = self.index
-            print(f"armed: {self.armed_index} {self.ena} {self.is_armed()}")
             self._redraw_armed()
             return True
-        print(f"not armed: {self.ena}, {self.armed_state}, {self.rect.collidepoint(pos)}")
         return False
 
     def depress(self, pos):
         if self.is_armed():
             if self.armed_rect.collidepoint(pos):
-                print(f"index : {self.index} -> {self.armed_index}")
                 self.index = self.armed_index
                 if self.on_update:
                     self.on_update(self)
@@ -212,7 +206,6 @@ class Combobox (Label):
         if self.is_armed():
             if self.armed_rect.collidepoint(pos):
                 self.armed_index = min(len(self.values) - 1, (pos[1] - self.armed_rect.top) // self.font.get_linesize())
-                print(f"armed_index : {self.armed_index}")
                 self._redraw_armed()
             else:
                 self.armed_cancel()
